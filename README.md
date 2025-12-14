@@ -18,6 +18,7 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 - [Persistencia con systemd](#-persistencia-con-systemd)
 - [Troubleshooting](#-troubleshooting)
 - [Contribuir](#-contribuir)
+- [TOPOLOGIA DE EJEMPLO Y USO](#topologia-de-ejemplo-y-uso)
 
 ## ✨ Características
 
@@ -462,13 +463,12 @@ Desarrollado con ❤️ para la comunidad de administradores de sistemas Linux.
 - [mirred action](https://man7.org/linux/man-pages/man8/tc-mirred.8.html)
 - [clsact qdisc](https://man7.org/linux/man-pages/man8/tc-clsact.8.html)
 
----
-
-**¿Preguntas o problemas?** Abre un issue en GitHub.
 
 
 
-# TOPOLOGIA DE EJEMPLO Y USO
+
+
+## TOPOLOGIA DE EJEMPLO Y USO
 ![TOPOLOGIA GNS3](https://i.imgur.com/OexcsyH.png)
 <br>
 <br>
@@ -675,7 +675,7 @@ Created symlink /etc/systemd/system/multi-user.target.wants/port-mirroring-ens3.
 
 Seleccione una opción: 2
 ```
-## TESTEO DE LABORATORIO
+### TESTEO DE LABORATORIO
 <br>
 
 ### Iniciamos una captura de trafico con wireshark en la interfaz que conecta NTOPNG y SW1 
@@ -693,4 +693,5 @@ Seleccione una opción: 2
 ![CAPTURA GNS3](https://i.imgur.com/qauk3qd.png)
 
 ---
-Muchas gracias por tu tiempo y tu comprensión.
+**Muchas gracias** por tu tiempo y tu comprensión. <br>
+**¿Preguntas o problemas?** Abre un issue en GitHub.
