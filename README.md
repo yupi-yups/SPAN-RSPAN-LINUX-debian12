@@ -467,3 +467,10 @@ Desarrollado con ❤️ para la comunidad de administradores de sistemas Linux.
 ---
 
 **¿Preguntas o problemas?** Abre un issue en GitHub.
+
+
+
+### TESTEO DE FOTO
+
+![TOPOLOGIA](https://prnt.sc/FmPeig_VGkvS)
+
