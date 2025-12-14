@@ -468,4 +468,229 @@ Desarrollado con ❤️ para la comunidad de administradores de sistemas Linux.
 
 
 
+# TOPOLOGIA DE EJEMPLO Y USO
+![TOPOLOGIA GNS3](https://i.imgur.com/OexcsyH.png)
+<br>
+<br>
 
+## Contexto
+Para este escenario se usaran 2 switches con cisco IOS (SW1 y SW2) y tambien 2 servidores Linux con O.S Debian 12. Para demostración solo se hará uso de 2 VLANS; VLAN1 para la salida a internet y la VLAN10 para el trafico RSPAN.
+
+El servidor NTOPNG se encargará de recibir el trafico espejado usando la interfaz ens3.10 logrando así tener de forma gráfica el flujo del trafico. El servidor MIRRORER copiará el trafico recibido de la interfaz ens3 y lo espejará a la interfaz ens3.10 la cual tambien tendrá comunicacion con la vlan RSPAN de los switches cisco.
+
+## Configuración de las VLANs y las interfaces troncales en los SWITCHES
+- Configuración SW1
+```bash
+SW1#conf t
+SW1(config)#vlan 10
+SW1(config-vlan)#name RSPAN
+SW1(config-vlan)#remote-span
+SW1(config-vlan)#exit
+
+SW1(config)#int g0/0
+SW1(config-if)#description NTOPNG
+SW1(config-if)#exit
+SW1(config)#int g0/2
+SW1(config-if)#description SW2
+SW1(config-if)#exit
+
+SW1(config)#int r g0/0,g0/2
+SW1(config-if-range)#switchport trunk encapsulation dot1q
+SW1(config-if-range)#switchport mode trunk
+SW1(config-if-range)#switchport trunk allowed vlan 1,10
+SW1(config-if-range)#exit
+SW1(config)#
+```
+- Configuración SW2
+```bash
+SW2#conf t
+SW2(config)#vlan 10
+SW2(config-vlan)#name RSPAN
+SW2(config-vlan)#remote-span
+SW2(config-vlan)#exit
+
+SW2(config)#int g0/0
+SW2(config-if)#description SW1
+SW2(config-if)#exit
+SW2(config)#int g0/1
+SW2(config-if)#description MIRRORER
+SW2(config-if)#exit
+
+SW2(config)#int r g0/0-1
+SW2(config-if-range)#switchport trunk encapsulation dot1q
+SW2(config-if-range)#switchport mode trunk
+SW2(config-if-range)#switchport trunk allowed vlan 1,10
+SW2(config-if-range)#exit
+SW2(config)#
+```
+### Configuración de RSPAN en ambos switches (SW1 Y SW2)
+- Configuración SW1
+```bash
+SW1(config)#monitor session 1 destination remote vlan 10
+```
+- Configuración SW2
+```bash
+SW2(config)#monitor session 1 destination remote vlan 10
+```
+Para verificar si está configurada la sesión usamos el comando `do sh monitor session all`
+```bash
+SW1(config)#do sh monitor session all
+Session 1
+---------
+Type                     : Remote Source Session
+Dest RSPAN VLAN        : 10
+```
+```bash
+SW2(config)#do sh monitor session all
+Session 1
+---------
+Type                     : Remote Source Session
+Dest RSPAN VLAN        : 10
+```
+
+## Configuración de RSPAN y VLANs en Server MIRRORER
+- Instalamos las herramientas necesarias para que funcione el script
+```bash
+root@MIRRORER:~# apt-get install iproute2 net-tools ifupdown2 git -y
+```
+- Clonamos el repositorio y preparamos el script
+```bash
+root@MIRRORER:~# git clone https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12.git
+root@MIRRORER:~# cd SPAN-RSPAN-LINUX-debian12/
+root@MIRRORER:~/SPAN-RSPAN-LINUX-debian12# chmod +x port-mirroring-manager.sh
+```
+Opcionalmente dejamos el script como un comando
+```bash
+root@MIRRORER:~/SPAN-RSPAN-LINUX-debian12# cp port-mirroring-manager.sh /usr/bin/port-mirroring-manager
+```
+- Habilitamos el modulo de `8021q` para el encapsulamiento (Este paso es igual en NTOPNG y MIRRORER)
+```bash
+root@MIRRORER:~# modprobe 8021q
+root@MIRRORER:~# lsmod | grep 8021q
+8021q                  40960  0
+garp                   16384  1 8021q
+mrp                    20480  1 8021q
+```
+- Configuramos las interfaces (Este paso es igual en NTOPNG y MIRRORER)
+```bash
+root@MIRRORER:~# vim /etc/network/interfaces
+
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+#VLAN1 INTERNET#
+auto ens3
+iface ens3 inet dhcp
+
+#VLAN10 RSPAN#
+auto ens3.10
+iface ens3.10 inet manual
+```
+- Ahora levantamos las interfaces con el comando `ifup ens3 ens3.10` y verificamos si tiene 802.1q la interfaz (Este paso es igual en NTOPNG y MIRRORER)
+
+```bash
+root@MIRRORER:~# ip -c -d link show ens3.10
+3: ens3.10@ens3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:b0:53:9c:00:00 brd ff:ff:ff:ff:ff:ff promiscuity 0  allmulti 0 minmtu 0 maxmtu 65535
+    vlan protocol 802.1Q id 10 <REORDER_HDR> addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 65536 tso_max_segs 65535 gro_max_size 65536
+```
+- Para este caso en el servidor MIRRORER haremos que el servidor copie el trafico de la interfaz con la VLAN 1 es decir la interfaz ens3
+```bash
+root@MIRRORER:~# port-mirroring-manager
+```
+- Seleccionamos la opción 1
+```bash
+╔════════════════════════════════════════════════════════╗
+║          PORT MIRRORING MANAGER v2.0               ║
+╚════════════════════════════════════════════════════════╝
+
+● Sin mirrors activos
+
+┌────────────────────────────────────────────────────────┐
+│  1) Crear port mirroring                          │
+│  2) Ver port-mirroring activos                    │
+│  3) Ver estado técnico (tc)                       │
+│  4) Eliminar port mirroring                       │
+│  0) ← Volver / Salir                             │
+└────────────────────────────────────────────────────────┘
+
+Seleccione una opción: 1
+```
+- Seleccionamos como "SOURCE" la interfaz ens3 y como "DESTINATION" la interfaz ens3.10 y que queremos espejar el trafico de salida y entrada
+```bash
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CREAR PORT MIRRORING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Selecciona interfaz SOURCE (origen del tráfico):
+  1) ens3 [UP]
+  2) ens3.10 [UP]
+  3) lo [UP]
+  0) ← Volver atrás
+Seleccione número (0 para volver): 1
+
+Selecciona interfaz DESTINATION (destino del mirror):
+  1) ens3 [UP]
+  2) ens3.10 [UP]
+  3) lo [UP]
+  0) ← Volver atrás
+Seleccione número (0 para volver): 2
+
+Tipo de tráfico a monitorear:
+  1) RX  (solo tráfico entrante)
+  2) TX  (solo tráfico saliente)
+  3) RX + TX  (bidireccional)
+  0) ← Volver atrás
+Opción: 3
+✓ Mirror RX+TX configurado: ens3 → ens3.10
+```
+- Por defecto estas configuraciones no son persistentes por lo que no resistirán un reinicio, como solución para este problema el script nos da a elegir si queremos que quede como servicio.
+```bash
+¿Hacer persistente con systemd? (s/n/0=volver): s
+Created symlink /etc/systemd/system/multi-user.target.wants/port-mirroring-ens3.service → /etc/systemd/system/port-mirroring-ens3.service.
+✓ Servicio systemd creado y habilitado
+```
+- El menú principal nos muestra si hay un "Mirror activo" pero si usamos la opción 2 del script en el menú principal, nos mostrará información un poco más detallada pero facil de entender.
+- Sin embargo, si deseamos ver más información más detallada y tecnica podemos usar la opción 3
+```bash
+╔════════════════════════════════════════════════════════╗
+║          PORT MIRRORING MANAGER v2.0               ║
+╚════════════════════════════════════════════════════════╝
+
+● Mirrors activos: 1
+
+┌────────────────────────────────────────────────────────┐
+│  1) Crear port mirroring                          │
+│  2) Ver port-mirroring activos                    │
+│  3) Ver estado técnico (tc)                       │
+│  4) Eliminar port mirroring                       │
+│  0) ← Volver / Salir                             │
+└────────────────────────────────────────────────────────┘
+
+Seleccione una opción: 2
+```
+## TESTEO DE LABORATORIO
+<br>
+
+### Iniciamos una captura de trafico con wireshark en la interfaz que conecta NTOPNG y SW1 
+![TOPOLOGIA-2 GNS3](https://i.imgur.com/jyb9HjY.png)
+<br>
+<br>
+### Hacemos un ping desde el host MIRRORER
+![PING HOST MIRRORER](https://i.imgur.com/b6LfStl.png)
+
+### CAPTURA DE TRAFICO 
+- Si usamos el filtro de `vlan` en wireshark podemos ver que en efecto el trafico espejado llega mediante la VLAN10
+![CAPTURA WIRESHARK](https://i.imgur.com/syI6BCf.png)
+
+### Visualización del trafico en NTOPNG
+![CAPTURA GNS3](https://i.imgur.com/qauk3qd.png)
+
+---
+Muchas gracias por tu tiempo y tu comprensión.
