@@ -39,7 +39,7 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 
 ### Interfaz
 - La interfaz que se quiera utilizar como rspan o destination debe estar en modo `manual`
-- Esto es similar al parametro `remote span` que cisco usa para preparar la vlan. 
+- Esto es similar al parametro `remote-span` que cisco usa para preparar la vlan. 
 ```bash
 #Interfaz source#
 auto eth0
