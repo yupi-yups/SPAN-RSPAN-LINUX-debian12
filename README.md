@@ -39,6 +39,7 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 
 ### Interfaz
 - La interfaz que se quiera utilizar como rspan o mirror debe estar en modo manual
+- Esto es similar al parametro `remote span` que cisco usa para preparar la vlan. 
 ```bash
 #Interfaz source#
 auto eth0
@@ -48,7 +49,21 @@ iface eth0 inet dhcp
 auto eth1
 iface eth1 inet manual
 ```
+- Tambien puede usarse una interfaz vlan.
+- Para crear una subinterfaz debe habilitarse el modulo 8021q de tal forma: `modprobe 8021q`
+```bash
+#Interfaz source#
+auto eth0
+iface eth0 inet dhcp
 
+#Ejemplo Interfaz VLAN-RSPAN-1#
+auto eth0.10
+iface eth0.10 inet manual
+
+#Ejemplo Interfaz VLAN-RSPAN-2#
+auto eth1.10
+iface eth1.10 inet manual
+```
 ### Herramientas
 ```bash
 # Debian/Ubuntu
