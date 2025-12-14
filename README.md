@@ -56,7 +56,7 @@ pacman -S iproute2 net-tools
 ```bash
 # Clonar el repositorio
 git clone https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12.git
-cd port-mirroring-manager
+cd SPAN-RSPAN-LINUX-debian12
 
 # Dar permisos de ejecución
 chmod +x port-mirroring-manager.sh
