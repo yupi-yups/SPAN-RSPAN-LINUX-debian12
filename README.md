@@ -38,7 +38,7 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 - Systemd (opcional, para persistencia)
 
 ### Interfaz
-- La interfaz que se quiera utilizar como rspan o mirror debe estar en modo manual
+- La interfaz que se quiera utilizar como rspan o mirror debe estar en modo `manual`
 - Esto es similar al parametro `remote span` que cisco usa para preparar la vlan. 
 ```bash
 #Interfaz source#
