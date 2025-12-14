@@ -75,11 +75,15 @@ select_iface() {
     echo -e "  ${CYAN}$i)${NC} $iface ${GRAY}[${NC}$status${GRAY}]${NC}" >&2
     ((i++))
   done
+  echo -e "  ${GRAY}0)${NC} ${YELLOW}← Volver atrás${NC}" >&2
   echo ""
 
   while true; do
-    read -rp "$(echo -e "${WHITE}Seleccione número: ${NC}")" selection >&2
-    if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#ifaces[@]}" ]; then
+    read -rp "$(echo -e "${WHITE}Seleccione número (0 para volver): ${NC}")" selection >&2
+    if [[ "$selection" == "0" ]]; then
+      echo "BACK"
+      return
+    elif [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#ifaces[@]}" ]; then
       echo "${ifaces[$((selection-1))]}"
       return
     else
@@ -265,9 +269,16 @@ add_mirroring() {
   print_section "CREAR PORT MIRRORING"
 
   SRC=$(select_iface "Selecciona interfaz SOURCE (origen del tráfico):")
+  if [[ "$SRC" == "BACK" ]]; then
+    return
+  fi
   SRC=$(echo "$SRC" | tr -d '\n\r')
+
   echo ""
   DST=$(select_iface "Selecciona interfaz DESTINATION (destino del mirror):")
+  if [[ "$DST" == "BACK" ]]; then
+    return
+  fi
   DST=$(echo "$DST" | tr -d '\n\r')
 
   if [[ "$SRC" == "$DST" ]]; then
@@ -282,8 +293,13 @@ add_mirroring() {
   echo -e "  ${CYAN}1)${NC} RX  ${GRAY}(solo tráfico entrante)${NC}"
   echo -e "  ${CYAN}2)${NC} TX  ${GRAY}(solo tráfico saliente)${NC}"
   echo -e "  ${CYAN}3)${NC} RX + TX  ${GRAY}(bidireccional)${NC}"
+  echo -e "  ${GRAY}0)${NC} ${YELLOW}← Volver atrás${NC}"
   echo ""
   read -rp "$(echo -e "${WHITE}Opción: ${NC}")" MODE
+
+  if [[ "$MODE" == "0" ]]; then
+    return
+  fi
 
   tc qdisc add dev "$SRC" clsact 2>/dev/null
 
@@ -312,8 +328,16 @@ add_mirroring() {
   esac
 
   echo ""
-  read -rp "$(echo -e "${YELLOW}¿Hacer persistente con systemd? (s/n): ${NC}")" PERSIST
-  if [[ "$PERSIST" == "s" ]]; then
+  read -rp "$(echo -e "${YELLOW}¿Hacer persistente con systemd? (s/n/0=volver): ${NC}")" PERSIST
+  if [[ "$PERSIST" == "0" ]]; then
+    # Deshacer cambios
+    tc filter del dev "$SRC" ingress 2>/dev/null
+    tc filter del dev "$SRC" egress 2>/dev/null
+    tc qdisc del dev "$SRC" clsact 2>/dev/null
+    echo -e "${YELLOW}Configuración revertida${NC}"
+    pause
+    return
+  elif [[ "$PERSIST" == "s" ]]; then
     create_systemd_service "$SRC" "$DST" "$MODE_NAME"
   fi
 
@@ -325,6 +349,9 @@ remove_mirroring() {
   print_section "ELIMINAR PORT MIRRORING"
 
   IFACE=$(select_iface "Selecciona la interfaz:")
+  if [[ "$IFACE" == "BACK" ]]; then
+    return
+  fi
   IFACE=$(echo "$IFACE" | tr -d '\n\r')
 
   echo ""
@@ -333,7 +360,12 @@ remove_mirroring() {
   show_tc "$IFACE"
 
   echo ""
-  read -rp "$(echo -e "${RED}¿Confirmar eliminación? (s/n): ${NC}")" CONF
+  read -rp "$(echo -e "${RED}¿Confirmar eliminación? (s/n/0=volver): ${NC}")" CONF
+  if [[ "$CONF" == "0" ]]; then
+    echo -e "${YELLOW}Operación cancelada${NC}"
+    pause
+    return
+  fi
   if [[ "$CONF" != "s" ]]; then
     echo -e "${YELLOW}Operación cancelada${NC}"
     pause
@@ -347,7 +379,7 @@ remove_mirroring() {
   echo -e "${GREEN}${CHECK}${NC} Port mirroring eliminado"
 
   echo ""
-  read -rp "$(echo -e "${YELLOW}¿Eliminar persistencia systemd? (s/n): ${NC}")" DEL
+  read -rp "$(echo -e "${YELLOW}¿Eliminar persistencia systemd? (s/n/0=omitir): ${NC}")" DEL
   if [[ "$DEL" == "s" ]]; then
     remove_systemd_service "$IFACE"
   fi
@@ -395,7 +427,7 @@ while true; do
   echo -e "${CYAN}│${NC}  ${CYAN}2)${NC} ${WHITE}Ver port-mirroring activos${NC}                    ${CYAN}│${NC}"
   echo -e "${CYAN}│${NC}  ${CYAN}3)${NC} ${WHITE}Ver estado técnico (tc)${NC}                       ${CYAN}│${NC}"
   echo -e "${CYAN}│${NC}  ${CYAN}4)${NC} ${WHITE}Eliminar port mirroring${NC}                       ${CYAN}│${NC}"
-  echo -e "${CYAN}│${NC}  ${CYAN}5)${NC} ${RED}Salir${NC}                                         ${CYAN}│${NC}"
+  echo -e "${CYAN}│${NC}  ${GRAY}0)${NC} ${YELLOW}← Volver / Salir${NC}                             ${CYAN}│${NC}"
   echo -e "${CYAN}└────────────────────────────────────────────────────────┘${NC}"
   echo ""
   read -rp "$(echo -e "${WHITE}Seleccione una opción: ${NC}")" OPT
@@ -405,7 +437,7 @@ while true; do
     2) show_active_mirroring ;;
     3) show_status_all ;;
     4) remove_mirroring ;;
-    5)
+    0|5)
       clear
       echo -e "${GREEN}¡Hasta luego!${NC}"
       exit 0
