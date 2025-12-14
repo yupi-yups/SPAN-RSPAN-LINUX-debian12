@@ -37,6 +37,18 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 - Linux con kernel 3.15+ (soporte para `tc` y `clsact`)
 - Systemd (opcional, para persistencia)
 
+### Interfaz
+- La interfaz que se quiera utilizar como rspan o mirror debe estar en modo manual
+```bash
+#Interfaz source#
+auto eth0
+iface eth0 inet dhcp
+
+#Interfaz RSPAN#
+auto eth1
+iface eth1 inet manual
+```
+
 ### Herramientas
 ```bash
 # Debian/Ubuntu
