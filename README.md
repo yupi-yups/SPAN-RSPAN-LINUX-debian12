@@ -55,7 +55,7 @@ pacman -S iproute2 net-tools
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/port-mirroring-manager.git
+git clone https://github.com/yupi-yups/port-mirroring-manager.git
 cd port-mirroring-manager
 
 # Dar permisos de ejecución
