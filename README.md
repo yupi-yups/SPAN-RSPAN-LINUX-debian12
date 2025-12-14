@@ -472,5 +472,6 @@ Desarrollado con ❤️ para la comunidad de administradores de sistemas Linux.
 
 ### TESTEO DE FOTO
 
-![TOPOLOGIA](https://prnt.sc/FmPeig_VGkvS)
+![TOPOLOGIA](https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12/blob/main/ASDASDASDASDASD.png?raw=true)
+
 
