@@ -14,6 +14,7 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 - [Uso](#-uso)
 - [Funcionalidades](#-funcionalidades)
 - [Ejemplos](#-ejemplos)
+- [Navegación y Controles](#-navegación-y-controles)
 - [Cómo Funciona](#-cómo-funciona)
 - [Persistencia con systemd](#-persistencia-con-systemd)
 - [Troubleshooting](#-troubleshooting)
@@ -55,8 +56,8 @@ pacman -S iproute2 net-tools
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12.git
-cd SPAN-RSPAN-LINUX-debian12
+https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12.git
+cd port-mirroring-manager
 
 # Dar permisos de ejecución
 chmod +x port-mirroring-manager.sh
@@ -87,7 +88,7 @@ sudo ./port-mirroring-manager.sh
 │  2) Ver port-mirroring activos                    │
 │  3) Ver estado técnico (tc)                       │
 │  4) Eliminar port mirroring                       │
-│  5) Salir                                         │
+│  0) ← Volver / Salir                              │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -105,6 +106,10 @@ Permite configurar el espejado de tráfico entre dos interfaces de red.
    - **TX**: Solo tráfico saliente (egress)
    - **RX + TX**: Tráfico bidireccional
 4. Opcionalmente, hacer la configuración persistente con systemd
+
+**💡 Navegación:**
+- Presiona `0` en cualquier momento para **volver atrás**
+- Si vuelves atrás después de configurar el mirror, los cambios se revierten automáticamente
 
 **Casos de uso:**
 - Monitoreo de tráfico con Wireshark
@@ -151,8 +156,10 @@ Muestra la configuración detallada de Traffic Control para todas las interfaces
 Permite remover configuraciones de mirroring existentes:
 1. Selecciona la interfaz a limpiar
 2. Muestra la configuración actual
-3. Confirma la eliminación
+3. Confirma la eliminación (o presiona `0` para cancelar)
 4. Opcionalmente, elimina la persistencia systemd
+
+**💡 Tip:** Usa `0` para cancelar en cualquier paso del proceso.
 
 ## 📚 Ejemplos
 
@@ -187,6 +194,50 @@ SOURCE: eth0 → DESTINATION: eth2 (IDS)
 # Mirror 2: Tráfico DMZ
 SOURCE: eth1 → DESTINATION: eth2 (IDS)
 ```
+
+## 🎮 Navegación y Controles
+
+### Controles Universales
+
+- **`0`** - Volver atrás en cualquier menú o selección
+- **`1-9`** - Seleccionar opciones numéricas
+- **`s/n`** - Confirmar o cancelar acciones
+- **`ENTER`** - Continuar después de mensajes
+
+### Flujo de Navegación
+
+```
+Menu Principal
+    │
+    ├─► [1] Crear Mirror
+    │       ├─► Seleccionar SOURCE (0 = volver)
+    │       ├─► Seleccionar DESTINATION (0 = volver)
+    │       ├─► Tipo de tráfico (0 = volver)
+    │       └─► Persistencia (0 = revertir cambios)
+    │
+    ├─► [2] Ver Activos
+    │       └─► [ENTER para volver]
+    │
+    ├─► [3] Estado Técnico
+    │       └─► [ENTER para volver]
+    │
+    ├─► [4] Eliminar Mirror
+    │       ├─► Seleccionar interfaz (0 = volver)
+    │       ├─► Confirmar (0 = cancelar)
+    │       └─► Eliminar systemd (0 = omitir)
+    │
+    └─► [0] Salir
+```
+
+### Comportamiento Especial
+
+**En "Crear Mirror":**
+- Si presionas `0` después de configurar el mirror pero antes de confirmar la persistencia, **todos los cambios de tc se revierten automáticamente**
+- Esto asegura que no queden configuraciones a medias
+
+**En "Eliminar Mirror":**
+- Presionar `0` en cualquier confirmación cancela toda la operación
+- No se eliminará nada hasta que confirmes explícitamente con `s`
 
 ## ⚙️ Cómo Funciona
 
@@ -373,10 +424,7 @@ Las contribuciones son bienvenidas. Por favor:
 - ⚠️ Asegúrate de que la interfaz de destino puede manejar el volumen de tráfico espejado
 - ⚠️ No uses la misma interfaz como source y destination
 - ⚠️ El tráfico espejado NO se modifica ni se elimina del flujo original
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+- 💡 Usa `0` para volver atrás en cualquier momento durante la configuración
 
 ## 👥 Autor
 
