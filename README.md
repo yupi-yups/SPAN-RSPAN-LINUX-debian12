@@ -2,7 +2,6 @@
 
 Una herramienta interactiva de línea de comandos para gestionar port mirroring (espejado de puertos) en Linux usando Traffic Control (tc).
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Bash](https://img.shields.io/badge/bash-5.0%2B-green.svg)
 ![Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)
 
@@ -19,7 +18,6 @@ Una herramienta interactiva de línea de comandos para gestionar port mirroring 
 - [Persistencia con systemd](#-persistencia-con-systemd)
 - [Troubleshooting](#-troubleshooting)
 - [Contribuir](#-contribuir)
-- [Licencia](#-licencia)
 
 ## ✨ Características
 
@@ -469,9 +467,5 @@ Desarrollado con ❤️ para la comunidad de administradores de sistemas Linux.
 **¿Preguntas o problemas?** Abre un issue en GitHub.
 
 
-
-### TESTEO DE FOTO
-
-![TOPOLOGIA](https://github.com/yupi-yups/SPAN-RSPAN-LINUX-debian12/blob/main/ASDASDASDASDASD.png?raw=true)
 
 
