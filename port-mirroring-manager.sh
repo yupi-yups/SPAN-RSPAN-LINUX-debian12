@@ -126,7 +126,7 @@ show_active_mirroring() {
       local INGRESS=$(tc filter show dev "$SRC_IF" ingress 2>/dev/null | grep "mirred")
       local EGRESS=$(tc filter show dev "$SRC_IF" egress 2>/dev/null | grep "mirred")
 
-      if [[ -n "$INGRESS" ]] || [[ -n "$EGRESS" ]]; then
+      if [[ -n "$INGRESS" || -n "$EGRESS" ]]; then
         found=1
 
         local DST_IF=""
@@ -134,7 +134,7 @@ show_active_mirroring() {
         local TRAFFIC_COLOR=""
 
         if [[ -n "$INGRESS" ]]; then
-          DST_IF=$(echo "$INGRESS" | sed -n 's/.*mirred.*dev \([^ ]*\).*/\1/p' | head -1)
+          DST_IF=$(echo "$INGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
           if [[ -n "$EGRESS" ]]; then
             TRAFFIC_TYPE="RX + TX"
             TRAFFIC_COLOR="${MAGENTA}"
@@ -143,7 +143,7 @@ show_active_mirroring() {
             TRAFFIC_COLOR="${GREEN}"
           fi
         elif [[ -n "$EGRESS" ]]; then
-          DST_IF=$(echo "$EGRESS" | sed -n 's/.*mirred.*dev \([^ ]*\).*/\1/p' | head -1)
+          DST_IF=$(echo "$EGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
           TRAFFIC_TYPE="TX (Egress)"
           TRAFFIC_COLOR="${YELLOW}"
         fi
@@ -163,13 +163,11 @@ show_active_mirroring() {
         if [[ -f "${SERVICE_DIR}/${SERVICE}" ]]; then
           local STATUS=$(systemctl is-enabled "$SERVICE" 2>/dev/null)
           local ACTIVE=$(systemctl is-active "$SERVICE" 2>/dev/null)
-          if [[ "$ACTIVE" == "active" ]]; then
-            echo -e "${CYAN}│${NC} ${GREEN}${CHECK}${NC} ${WHITE}Persistente${NC} ${GRAY}(systemd: ${STATUS})${NC}"
-          else
-            echo -e "${CYAN}│${NC} ${YELLOW}${CHECK}${NC} ${WHITE}Persistente${NC} ${GRAY}(systemd: ${STATUS}, inactivo)${NC}"
-          fi
+          [[ "$ACTIVE" == "active" ]] \
+            && echo -e "${CYAN}│${NC} ${GREEN}${CHECK}${NC} Persistente (${STATUS})" \
+            || echo -e "${CYAN}│${NC} ${YELLOW}${CHECK}${NC} Persistente (${STATUS}, inactivo)"
         else
-          echo -e "${CYAN}│${NC} ${RED}${CROSS}${NC} ${GRAY}No persistente (solo en memoria)${NC}"
+          echo -e "${CYAN}│${NC} ${RED}${CROSS}${NC} No persistente"
         fi
 
         echo -e "${CYAN}╰─────────────────────────────────────────────────────────╯${NC}"
@@ -179,38 +177,7 @@ show_active_mirroring() {
     fi
   done
 
-  if [[ $found -eq 0 ]]; then
-    echo -e "${GRAY}No hay port-mirroring activos en el sistema.${NC}"
-    echo ""
-  else
-    echo -e "${GREEN}${BULLET}${NC} Total: $((count-1)) mirror(s) activo(s)"
-    echo ""
-  fi
-
-  print_section "SERVICIOS SYSTEMD"
-
-  local systemd_found=0
-  for SERVICE_FILE in "${SERVICE_DIR}"/port-mirroring-*.service; do
-    if [[ -f "$SERVICE_FILE" ]]; then
-      systemd_found=1
-      local SERVICE_NAME=$(basename "$SERVICE_FILE")
-      local SRC_IF=$(echo "$SERVICE_NAME" | sed 's/port-mirroring-\(.*\)\.service/\1/')
-      local STATUS=$(systemctl is-enabled "$SERVICE_NAME" 2>/dev/null)
-      local ACTIVE=$(systemctl is-active "$SERVICE_NAME" 2>/dev/null)
-
-      if [[ "$ACTIVE" == "active" ]]; then
-        echo -e "  ${GREEN}${BULLET}${NC} $SERVICE_NAME"
-      else
-        echo -e "  ${YELLOW}${BULLET}${NC} $SERVICE_NAME"
-      fi
-      echo -e "    ${GRAY}└─${NC} Interfaz: ${CYAN}$SRC_IF${NC} ${GRAY}|${NC} Estado: ${WHITE}$STATUS${NC} ${GRAY}|${NC} Activo: ${WHITE}$ACTIVE${NC}"
-    fi
-  done
-
-  if [[ $systemd_found -eq 0 ]]; then
-    echo -e "${GRAY}No hay servicios systemd configurados.${NC}"
-  fi
-
+  [[ $found -eq 0 ]] && echo -e "${GRAY}No hay mirrors activos.${NC}"
   pause
 }
 
@@ -221,25 +188,61 @@ create_systemd_service() {
 
   local SERVICE="port-mirroring-${SRC}.service"
 
+  # Texto legible para systemd
+  case "$MODE" in
+    RX)   MODE_DESC="RX (Ingress)" ;;
+    TX)   MODE_DESC="TX (Egress)" ;;
+    BOTH) MODE_DESC="RX + TX" ;;
+  esac
+
   cat > "${SERVICE_DIR}/${SERVICE}" <<EOF
 [Unit]
-Description=Port Mirroring ${SRC} -> ${DST}
+Description=Port Mirroring ${SRC} → ${DST} (${MODE_DESC})
+Documentation=man:tc(8)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/sbin/tc qdisc add dev ${SRC} clsact
+StandardOutput=journal
+StandardError=journal
+
+# ===== VALIDACIONES =====
+ExecStartPre=/bin/sh -c 'ip link show ${SRC} >/dev/null'
+ExecStartPre=/bin/sh -c 'ip link show ${DST} >/dev/null'
+
+# ===== APLICAR MIRROR =====
+ExecStart=/bin/sh -c '\
+  echo "[PM] Activando port mirroring ${SRC} → ${DST} (${MODE_DESC})"; \
+  tc qdisc add dev ${SRC} clsact 2>/dev/null || true \
+'
 EOF
 
-  [[ "$MODE" == "RX" || "$MODE" == "BOTH" ]] && \
-    echo "ExecStart=/sbin/tc filter add dev ${SRC} ingress matchall action mirred egress mirror dev ${DST}" >> "${SERVICE_DIR}/${SERVICE}"
+  [[ "$MODE" == "RX" || "$MODE" == "BOTH" ]] && cat >> "${SERVICE_DIR}/${SERVICE}" <<EOF
+ExecStart=/bin/sh -c 'tc filter add dev ${SRC} ingress matchall action mirred egress mirror dev ${DST}'
+EOF
 
-  [[ "$MODE" == "TX" || "$MODE" == "BOTH" ]] && \
-    echo "ExecStart=/sbin/tc filter add dev ${SRC} egress matchall action mirred egress mirror dev ${DST}" >> "${SERVICE_DIR}/${SERVICE}"
+  [[ "$MODE" == "TX" || "$MODE" == "BOTH" ]] && cat >> "${SERVICE_DIR}/${SERVICE}" <<EOF
+ExecStart=/bin/sh -c 'tc filter add dev ${SRC} egress matchall action mirred egress mirror dev ${DST}'
+EOF
 
   cat >> "${SERVICE_DIR}/${SERVICE}" <<EOF
+
+# ===== ELIMINAR MIRROR =====
+ExecStop=/bin/sh -c '\
+  echo "[PM] Eliminando port mirroring en ${SRC}"; \
+  tc filter del dev ${SRC} ingress 2>/dev/null || true; \
+  tc filter del dev ${SRC} egress  2>/dev/null || true; \
+  tc qdisc del dev ${SRC} clsact   2>/dev/null || true \
+'
+
+# ===== INFO POST =====
+ExecStartPost=/bin/sh -c '\
+  echo "[PM] Estado aplicado:"; \
+  tc filter show dev ${SRC} ingress; \
+  tc filter show dev ${SRC} egress \
+'
 
 [Install]
 WantedBy=multi-user.target
@@ -247,8 +250,10 @@ EOF
 
   systemctl daemon-reload
   systemctl enable "$SERVICE"
-  echo -e "${GREEN}${CHECK}${NC} Servicio systemd creado y habilitado"
+
+  echo -e "${GREEN}${CHECK}${NC} Servicio systemd creado con estado mejorado"
 }
+
 
 remove_systemd_service() {
   local SRC="$1"
@@ -262,6 +267,108 @@ remove_systemd_service() {
   else
     echo -e "${YELLOW}No se encontró servicio systemd para esta interfaz${NC}"
   fi
+}
+
+persist_existing_mirroring() {
+  print_header
+  print_section "HACER PERSISTENTE PORT MIRRORING ACTIVO"
+
+  local found=0
+
+  for SRC_IF in $(get_ifaces); do
+    tc qdisc show dev "$SRC_IF" 2>/dev/null | grep -q "clsact" || continue
+
+    local INGRESS=$(tc filter show dev "$SRC_IF" ingress 2>/dev/null | grep "mirred")
+    local EGRESS=$(tc filter show dev "$SRC_IF" egress 2>/dev/null | grep "mirred")
+
+    [[ -z "$INGRESS" && -z "$EGRESS" ]] && continue
+
+    found=1
+    SERVICE="port-mirroring-${SRC_IF}.service"
+
+    # Si ya existe servicio, no tocar
+    if [[ -f "${SERVICE_DIR}/${SERVICE}" ]]; then
+      echo -e "${YELLOW}${CHECK}${NC} $SRC_IF ya tiene servicio systemd (${SERVICE})"
+      continue
+    fi
+
+    # Detectar destino y modo
+    if [[ -n "$INGRESS" && -n "$EGRESS" ]]; then
+      MODE="BOTH"
+      DST=$(echo "$INGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
+    elif [[ -n "$INGRESS" ]]; then
+      MODE="RX"
+      DST=$(echo "$INGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
+    else
+      MODE="TX"
+      DST=$(echo "$EGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
+    fi
+
+    echo ""
+    echo -e "${CYAN}Interfaz:${NC} $SRC_IF"
+    echo -e "${CYAN}Destino:${NC}   $DST"
+    echo -e "${CYAN}Modo:${NC}      $MODE"
+    echo ""
+
+    read -rp "$(echo -e "${YELLOW}¿Crear servicio systemd para este mirror? (s/n): ${NC}")" RESP
+    [[ "$RESP" != "s" ]] && continue
+
+    create_systemd_service "$SRC_IF" "$DST" "$MODE"
+  done
+
+  [[ $found -eq 0 ]] && echo -e "${GRAY}No hay port mirroring activos sin persistencia.${NC}"
+
+  pause
+}
+
+remove_persistence_only() {
+  print_header
+  print_section "ELIMINAR SOLO PERSISTENCIA (SYSTEMD)"
+
+  local found=0
+
+  for SRC_IF in $(get_ifaces); do
+    tc qdisc show dev "$SRC_IF" 2>/dev/null | grep -q "clsact" || continue
+
+    local INGRESS=$(tc filter show dev "$SRC_IF" ingress 2>/dev/null | grep "mirred")
+    local EGRESS=$(tc filter show dev "$SRC_IF" egress 2>/dev/null | grep "mirred")
+
+    [[ -z "$INGRESS" && -z "$EGRESS" ]] && continue
+
+    found=1
+    SERVICE="port-mirroring-${SRC_IF}.service"
+
+    if [[ ! -f "${SERVICE_DIR}/${SERVICE}" ]]; then
+      echo -e "${GRAY}${BULLET}${NC} $SRC_IF → sin servicio systemd"
+      continue
+    fi
+
+    # Detectar destino (solo informativo)
+    if [[ -n "$INGRESS" ]]; then
+      DST=$(echo "$INGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
+    else
+      DST=$(echo "$EGRESS" | sed -n 's/.*to device \([^)]*\).*/\1/p' | head -1)
+    fi
+
+    echo ""
+    echo -e "${CYAN}Interfaz:${NC} $SRC_IF"
+    echo -e "${CYAN}Destino:${NC}   $DST"
+    echo -e "${CYAN}Servicio:${NC}  $SERVICE"
+    echo ""
+
+    read -rp "$(echo -e "${RED}¿Eliminar SOLO el servicio systemd? (s/n): ${NC}")" RESP
+    [[ "$RESP" != "s" ]] && continue
+
+    systemctl disable --now "$SERVICE"
+    rm -f "${SERVICE_DIR}/${SERVICE}"
+    systemctl daemon-reload
+
+    echo -e "${GREEN}${CHECK}${NC} Persistencia eliminada para $SRC_IF"
+  done
+
+  [[ $found -eq 0 ]] && echo -e "${GRAY}No hay port mirroring activos.${NC}"
+
+  pause
 }
 
 add_mirroring() {
@@ -427,6 +534,8 @@ while true; do
   echo -e "${CYAN}│${NC}  ${CYAN}2)${NC} ${WHITE}Ver port-mirroring activos${NC}                    ${CYAN}│${NC}"
   echo -e "${CYAN}│${NC}  ${CYAN}3)${NC} ${WHITE}Ver estado técnico (tc)${NC}                       ${CYAN}│${NC}"
   echo -e "${CYAN}│${NC}  ${CYAN}4)${NC} ${WHITE}Eliminar port mirroring${NC}                       ${CYAN}│${NC}"
+  echo -e "${CYAN}│${NC}  ${CYAN}5)${NC} ${WHITE}Hacer persistente mirror activo${NC}               ${CYAN}│${NC}"
+  echo -e "${CYAN}│${NC}  ${CYAN}6)${NC} ${WHITE}Eliminar solo persistencia (systemd)${NC}          ${CYAN}│${NC}"
   echo -e "${CYAN}│${NC}  ${GRAY}0)${NC} ${YELLOW}← Volver / Salir${NC}                             ${CYAN}│${NC}"
   echo -e "${CYAN}└────────────────────────────────────────────────────────┘${NC}"
   echo ""
@@ -437,7 +546,9 @@ while true; do
     2) show_active_mirroring ;;
     3) show_status_all ;;
     4) remove_mirroring ;;
-    0|5)
+    5) persist_existing_mirroring ;;
+    6) remove_persistence_only ;;
+    0|7)
       clear
       echo -e "${GREEN}¡Hasta luego!${NC}"
       exit 0
